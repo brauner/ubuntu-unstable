@@ -10548,7 +10548,6 @@ CONFIG_GCOV_KERNEL                              policy<{'amd64': 'n', 'arm64': '
 
 # Menu: General setup
 CONFIG_COMPILE_TEST                             policy<{'amd64': 'n', 'arm64': 'n', 'armhf': 'n', 'i386': 'n', 'ppc64el': 'n', 's390x': 'n'}>
-CONFIG_HEADER_TEST                              policy<{'amd64': 'n', 'arm64': 'n', 'armhf': 'n', 'i386': 'n', 'ppc64el': 'n', 's390x': 'n'}>
 CONFIG_LOCALVERSION                             policy<{'amd64': '""', 'arm64': '""', 'armhf': '""', 'i386': '""', 'ppc64el': '""', 's390x': '""'}>
 CONFIG_LOCALVERSION_AUTO                        policy<{'amd64': 'n', 'arm64': 'n', 'armhf': 'n', 'i386': 'n', 'ppc64el': 'n', 's390x': 'n'}>
 CONFIG_BUILD_SALT                               policy<{'amd64': '""', 'arm64': '""', 'armhf': '""', 'i386': '""', 'ppc64el': '""', 's390x': '""'}>
