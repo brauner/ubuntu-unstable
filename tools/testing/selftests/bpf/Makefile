@@ -139,9 +139,15 @@ VMLINUX_BTF_PATHS := $(if $(O),$(O)/vmlinux)				\
 VMLINUX_BTF := $(abspath $(firstword $(wildcard $(VMLINUX_BTF_PATHS))))
 
 $(OUTPUT)/runqslower: $(BPFOBJ)
-	$(Q)$(MAKE) $(submake_extras) -C $(TOOLSDIR)/bpf/runqslower	\
+	$(Q)if [ ! -e "$(VMLINUX_BTF)" ] ; then \
+		echo "WARNING: Skipping build of runqslower, because\n" \
+		    "   Couldn't find kernel BTF (vmlinux not yet built?);\n" \
+		    "   Set VMLINUX_BTF to specify its location." >&2; \
+	    else
+		$(MAKE) $(submake_extras) -C $(TOOLSDIR)/bpf/runqslower	\
 		    OUTPUT=$(SCRATCH_DIR)/ VMLINUX_BTF=$(VMLINUX_BTF)   \
 		    BPFOBJ=$(BPFOBJ) BPF_INCLUDE=$(INCLUDE_DIR)
+	    fi
 
 $(TEST_GEN_PROGS) $(TEST_GEN_PROGS_EXTENDED): $(OUTPUT)/test_stub.o $(BPFOBJ)
 
