@@ -240,6 +240,9 @@ static int shiftfs_d_weak_revalidate(struct dentry *dentry, unsigned int flags)
 	int err = 1;
 	struct dentry *lowerd = dentry->d_fsdata;
 
+	if (d_is_negative(lowerd) != d_is_negative(dentry))
+		return 0;
+
 	if (lowerd->d_flags & DCACHE_OP_WEAK_REVALIDATE) {
 		err = lowerd->d_op->d_weak_revalidate(lowerd, flags);
 		if (err < 0)
@@ -264,13 +267,16 @@ static int shiftfs_d_revalidate(struct dentry *dentry, unsigned int flags)
 	if (flags & LOOKUP_RCU)
 		return -ECHILD;
 
+	if (d_unhashed(lowerd) ||
+	    d_is_negative(lowerd) != d_is_negative(dentry))
+		return 0;
+
 	if (lowerd->d_flags & DCACHE_OP_REVALIDATE) {
 		err = lowerd->d_op->d_revalidate(lowerd, flags);
 		if (err < 0)
 			return err;
 		if (!err) {
-			if (!(flags & LOOKUP_RCU))
-				d_invalidate(lowerd);
+			d_invalidate(lowerd);
 			return -ESTALE;
 		}
 	}
