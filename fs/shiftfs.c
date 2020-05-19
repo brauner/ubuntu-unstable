@@ -1344,12 +1344,13 @@ static int shiftfs_fadvise(struct file *file, loff_t offset, loff_t len,
 }
 
 static int shiftfs_override_ioctl_creds(const struct super_block *sb,
+					kuid_t i_uid, kgid_t i_gid,
 					const struct cred **oldcred,
 					struct cred **newcred)
 {
 	struct shiftfs_super_info *sbinfo = sb->s_fs_info;
-	kuid_t fsuid = current_fsuid();
-	kgid_t fsgid = current_fsgid();
+	kuid_t fsuid = current_fsuid(), kuid_root;
+	kgid_t fsgid = current_fsgid(), kgid_root;
 
 	*oldcred = shiftfs_override_creds(sb);
 
@@ -1358,6 +1359,20 @@ static int shiftfs_override_ioctl_creds(const struct super_block *sb,
 		revert_creds(*oldcred);
 		return -ENOMEM;
 	}
+
+	/*
+	 * Handle cases where root is trying to delete a subvolume that has
+	 * been chowned to another user.
+	 */
+	kuid_root = make_kuid(sb->s_user_ns, 0);
+	if (uid_valid(kuid_root) && uid_valid(i_uid) &&
+	    uid_eq(fsuid, kuid_root) && !uid_eq(fsuid, i_uid))
+		fsuid = i_uid;
+
+	kgid_root = make_kgid(sb->s_user_ns, 0);
+	if (gid_valid(kgid_root) && gid_valid(i_gid) &&
+	    gid_eq(fsgid, kgid_root) && !gid_eq(fsgid, i_gid))
+		fsgid = i_gid;
 
 	(*newcred)->fsuid = shift_kuid(sb->s_user_ns, sbinfo->userns, fsuid);
 	(*newcred)->fsgid = shift_kgid(sb->s_user_ns, sbinfo->userns, fsgid);
@@ -1478,6 +1493,30 @@ static int shiftfs_btrfs_ioctl_fd_replace(int cmd, void __user *arg,
 	return ret;
 }
 
+static void shiftfs_btrfs_ioctl_delete_uidgid(int cmd, void __user *arg,
+					      kuid_t *i_uid, kgid_t *i_gid)
+{
+	if (cmd == BTRFS_IOC_SNAP_DESTROY) {
+		struct btrfs_ioctl_vol_args *vol = NULL;
+		struct fd src;
+
+		vol = memdup_user(arg, sizeof(*vol));
+		if (IS_ERR(vol))
+			return;
+
+		src = fdget(vol->fd);
+		if (!src.file)
+			goto out;
+
+		*i_uid = file_inode(src.file)->i_uid;
+		*i_gid = file_inode(src.file)->i_gid;
+
+		fdput(src);
+	out:
+		kfree(vol);
+	}
+}
+
 static long shiftfs_real_ioctl(struct file *file, unsigned int cmd,
 			       unsigned long arg)
 {
@@ -1490,6 +1529,8 @@ static long shiftfs_real_ioctl(struct file *file, unsigned int cmd,
 	struct super_block *sb = file->f_path.dentry->d_sb;
 	struct btrfs_ioctl_vol_args *btrfs_v1 = NULL;
 	struct btrfs_ioctl_vol_args_v2 *btrfs_v2 = NULL;
+	kuid_t i_uid = INVALID_UID;
+	kgid_t i_gid = INVALID_GID;
 
 	ret = shiftfs_btrfs_ioctl_fd_replace(cmd, argp, &btrfs_v1, &btrfs_v2,
 					     &newfd);
@@ -1500,7 +1541,9 @@ static long shiftfs_real_ioctl(struct file *file, unsigned int cmd,
 	if (ret)
 		goto out_restore;
 
-	ret = shiftfs_override_ioctl_creds(sb, &oldcred, &newcred);
+	shiftfs_btrfs_ioctl_delete_uidgid(cmd, argp, &i_uid, &i_gid);
+
+	ret = shiftfs_override_ioctl_creds(sb, i_uid, i_gid, &oldcred, &newcred);
 	if (ret)
 		goto out_fdput;
 
