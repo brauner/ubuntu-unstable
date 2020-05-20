@@ -1493,23 +1493,44 @@ static int shiftfs_btrfs_ioctl_fd_replace(int cmd, void __user *arg,
 	return ret;
 }
 
-static void shiftfs_btrfs_ioctl_delete_uidgid(int cmd, void __user *arg,
-					      kuid_t *i_uid, kgid_t *i_gid)
+static void shiftfs_btrfs_ioctl_delete_uidgid(struct file *file, int cmd,
+					      void __user *arg, kuid_t *i_uid,
+					      kgid_t *i_gid)
 {
 	if (cmd == BTRFS_IOC_SNAP_DESTROY) {
 		struct btrfs_ioctl_vol_args *vol = NULL;
+		struct dentry *parent = file->f_path.dentry, *dentry;
+		struct inode *dir = d_inode(parent), *inode;
 		struct fd src;
+		size_t namelen;
+		char *name;
 
 		vol = memdup_user(arg, sizeof(*vol));
 		if (IS_ERR(vol))
 			return;
 
-		src = fdget(vol->fd);
-		if (!src.file)
+		vol->name[BTRFS_PATH_NAME_MAX] = 0;
+		name = vol->name;
+		namelen = strlen(name);
+
+		if (strchr(name, '/') || strncmp(name, "..", namelen) == 0)
 			goto out;
 
-		*i_uid = file_inode(src.file)->i_uid;
-		*i_gid = file_inode(src.file)->i_gid;
+		if (!S_ISDIR(dir->i_mode))
+			goto out;
+
+		inode_lock(dir);
+		dentry = lookup_one_len(name, parent, namelen);
+		inode_unlock(dir);
+		if (IS_ERR(dentry))
+			goto out;
+
+		inode = d_inode(dentry);
+		if (inode) {
+			*i_uid = inode->i_uid;
+			*i_gid = inode->i_gid;
+		}
+		dput(dentry);
 
 		fdput(src);
 	out:
@@ -1541,7 +1562,7 @@ static long shiftfs_real_ioctl(struct file *file, unsigned int cmd,
 	if (ret)
 		goto out_restore;
 
-	shiftfs_btrfs_ioctl_delete_uidgid(cmd, argp, &i_uid, &i_gid);
+	shiftfs_btrfs_ioctl_delete_uidgid(file, cmd, argp, &i_uid, &i_gid);
 
 	ret = shiftfs_override_ioctl_creds(sb, i_uid, i_gid, &oldcred, &newcred);
 	if (ret)
