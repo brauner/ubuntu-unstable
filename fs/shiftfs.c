@@ -243,11 +243,8 @@ static int shiftfs_d_weak_revalidate(struct dentry *dentry, unsigned int flags)
 	if (d_is_negative(lowerd) != d_is_negative(dentry))
 		return 0;
 
-	if (lowerd->d_flags & DCACHE_OP_WEAK_REVALIDATE) {
+	if (lowerd->d_flags & DCACHE_OP_WEAK_REVALIDATE)
 		err = lowerd->d_op->d_weak_revalidate(lowerd, flags);
-		if (err < 0)
-			return err;
-	}
 
 	if (d_really_is_positive(dentry)) {
 		struct inode *inode = d_inode(dentry);
@@ -271,15 +268,8 @@ static int shiftfs_d_revalidate(struct dentry *dentry, unsigned int flags)
 	    d_is_negative(lowerd) != d_is_negative(dentry))
 		return 0;
 
-	if (lowerd->d_flags & DCACHE_OP_REVALIDATE) {
+	if (lowerd->d_flags & DCACHE_OP_REVALIDATE)
 		err = lowerd->d_op->d_revalidate(lowerd, flags);
-		if (err < 0)
-			return err;
-		if (!err) {
-			d_invalidate(lowerd);
-			return -ESTALE;
-		}
-	}
 
 	if (d_really_is_positive(dentry)) {
 		struct inode *inode = d_inode(dentry);
