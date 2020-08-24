@@ -625,23 +625,51 @@ static int shiftfs_rename(struct inode *olddir, struct dentry *old,
 		      *trapd;
 	struct inode *loweri_dir_old = lowerd_dir_old->d_inode,
 		     *loweri_dir_new = lowerd_dir_new->d_inode;
+	struct dentry *olddentry;
+	struct dentry *newdentry;
 	int err = -EINVAL;
 	const struct cred *oldcred;
 
-	trapd = lock_rename(lowerd_dir_new, lowerd_dir_old);
-
-	if (trapd == lowerd_old || trapd == lowerd_new)
-		goto out_unlock;
+	/* We don't yet support any advanced rename operations. */
+	if (flags)
+		return -EINVAL;
 
 	oldcred = shiftfs_override_creds(old->d_sb);
-	err = vfs_rename(loweri_dir_old, lowerd_old, loweri_dir_new, lowerd_new,
+
+	trapd = lock_rename(lowerd_dir_new, lowerd_dir_old);
+
+	olddentry = lookup_one_len(old->d_name.name, lowerd_dir_old, old->d_name.len);
+	if (IS_ERR(olddentry)) {
+		err = PTR_ERR(olddentry);
+		goto out_revert_creds;
+	}
+
+	newdentry = lookup_one_len(new->d_name.name, lowerd_dir_new, new->d_name.len);
+	if (IS_ERR(newdentry)) {
+		err = PTR_ERR(newdentry);
+		goto out_dput_old;
+	}
+
+	if (olddentry == trapd)
+		goto out_dput_new;
+	if (newdentry == trapd)
+		goto out_dput_new;
+
+	if (olddentry->d_inode == newdentry->d_inode)
+		goto out_dput_new;
+
+	err = vfs_rename(loweri_dir_old, olddentry, loweri_dir_new, newdentry,
 			 NULL, flags);
-	revert_creds(oldcred);
 
 	shiftfs_copyattr(loweri_dir_old, olddir);
 	shiftfs_copyattr(loweri_dir_new, newdir);
 
-out_unlock:
+out_dput_new:
+	dput(newdentry);
+out_dput_old:
+	dput(olddentry);
+out_revert_creds:
+	revert_creds(oldcred);
 	unlock_rename(lowerd_dir_new, lowerd_dir_old);
 
 	return err;
