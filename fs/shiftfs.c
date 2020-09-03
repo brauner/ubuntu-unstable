@@ -725,8 +725,6 @@ static int shiftfs_fiemap(struct inode *inode,
 		return -EOPNOTSUPP;
 
 	oldcred = shiftfs_override_creds(inode->i_sb);
-	if (fieinfo->fi_flags & FIEMAP_FLAG_SYNC)
-		filemap_write_and_wait(loweri->i_mapping);
 	err = loweri->i_op->fiemap(loweri, fieinfo, start, len);
 	revert_creds(oldcred);
 
